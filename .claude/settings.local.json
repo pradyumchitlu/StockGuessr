@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm init:*)",
+      "Bash(npm create:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(cat:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npx create-next-app:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(npm run seed:*)",
+      "Bash(timeout 5 npm run dev:*)",
+      "Bash(timeout 10 npm run dev:*)",
+      "Bash(lsof:*)",
+      "Bash(cmd /c \"taskkill /PID 40196 /F & taskkill /PID 40648 /F\")",
+      "Bash(powershell -Command \"Get-Process | Where-Object {$_ProcessName -eq ''node''} | Stop-Process -Force; Write-Host ''All Node.js processes terminated''\")",
+      "Bash(powershell -Command:*)",
+      "Bash(grep:*)",
+      "Bash(curl:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfix: Resolve Tailwind CSS v4 compatibility and build errors\n\n- Install @tailwindcss/postcss package and update PostCSS config to use new plugin\n- Update globals.css to use @import instead of @tailwind directives for Tailwind v4\n- Replace @apply directives with plain CSS for better v4 compatibility\n- Fix TypeScript path alias in tsconfig.json to correctly map @/* to ./app/*\n- Remove problematic custom color utilities from Tailwind config\n- Update layout.tsx to remove non-existent Tailwind classes\n- Clean up CSS utilities to avoid relying on undefined color classes\n\nThe application now builds successfully and runs without errors.\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "WebFetch(domain:bloomtechnologies.app)",
+      "WebFetch(domain:phyvant.com)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: Redesign landing page with premium modern aesthetics\n\n- Complete visual overhaul inspired by high-end SaaS platforms (Bloom Technologies)\n- New color scheme: cyan (#00e6c5) and magenta (#d85ce0) accent gradients\n- Advanced animated background with layered gradient orbs and smooth transitions\n- Premium typography with black font weights and better hierarchy\n- Redesigned navigation with gradient logo and enhanced button styling\n- Large-scale hero section with compelling headline and multiple CTAs\n- New stats cards with glassmorphism effect and hover animations\n- Enhanced features grid with color-coded icons and better descriptions\n- Added \"How It Works\" section with visual step flow\n- Improved final CTA section with stronger visual impact\n- Better spacing, padding, and responsive design throughout\n- Smooth scroll animations and interactive hover states on all elements\n- Professional footer with branding\n\nThe landing page now has a premium, sophisticated look comparable to top-tier SaaS products.\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "WebFetch(domain:www.tryprofound.com)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
