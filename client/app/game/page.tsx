@@ -27,6 +27,7 @@ interface News {
   week: number;
   headline: string;
   date: string;
+  source?: string;
 }
 
 interface Scenario {
@@ -278,21 +279,21 @@ export default function GamePage() {
     let calculatedEquity = finalEquity;
     if (finalPos) {
       const lastPrice = scenario.gameCandles[3].close;
-      const proceeds = finalPos.shares * lastPrice;
-      calculatedEquity += proceeds;
 
       const closeTrade: Trade = {
         week: 3,
-        action: "SELL",
+        action: finalPos.shares > 0 ? "SELL" : "BUY", // Sell if long, Buy to cover if short
         price: lastPrice,
-        shares: finalPos.shares,
-        pnl: proceeds - (finalPos.shares * finalPos.entryPrice),
+        shares: Math.abs(finalPos.shares),
+        pnl: finalPos.shares > 0
+          ? (lastPrice - finalPos.entryPrice) * finalPos.shares  // Long PnL
+          : (finalPos.entryPrice - lastPrice) * Math.abs(finalPos.shares), // Short PnL
         timestamp: new Date(),
       };
       setTrades(prev => [...prev, closeTrade]);
     }
 
-    setAvailableCash(calculatedEquity);
+    setAvailableCash(finalEquity);
     setGameState("completed");
 
     try {
@@ -388,13 +389,13 @@ export default function GamePage() {
     return (
       <div className="min-h-screen bg-black text-white flex flex-col">
         {/* Top Bar */}
-        <header className="h-16 border-b border-white/10 flex items-center justify-between px-6 bg-black/50 backdrop-blur sticky top-0 z-50">
+        <header className="h-14 border-b border-white/10 flex items-center justify-between px-6 bg-black/50 backdrop-blur sticky top-0 z-50">
           <div className="flex items-center gap-4">
             <div className="px-3 py-1 rounded bg-purple-500/20 text-purple-300 text-sm font-bold">
               Week {currentWeek + 1} / 4
             </div>
             {roundPhase === "decision" && (
-              <div className="w-64">
+              <div className="w-48">
                 <GameTimer
                   duration={DECISION_DURATION}
                   isActive={true}
@@ -404,24 +405,51 @@ export default function GamePage() {
             )}
           </div>
 
-          <div className="flex items-center gap-8">
+          <div className="flex items-center gap-6">
             <div className="text-right">
               <p className="text-xs text-gray-400 uppercase tracking-wider">Equity</p>
-              <p className="text-2xl font-mono font-bold text-green-400">
+              <p className="text-xl font-mono font-bold text-green-400">
                 ${(availableCash + (position ? position.shares * currentCandle.close : 0)).toLocaleString()}
               </p>
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-400 uppercase tracking-wider">Cash</p>
-              <p className="text-xl font-mono text-gray-300">${availableCash.toLocaleString()}</p>
+              <p className="text-lg font-mono text-gray-300">${availableCash.toLocaleString()}</p>
             </div>
           </div>
         </header>
 
+        {/* News Ticker - Scrollable at top center */}
+        {currentWeekNews.length > 0 && (
+          <div className="border-b border-white/10 bg-gradient-to-r from-blue-900/20 via-purple-900/20 to-blue-900/20">
+            <div className="max-w-4xl mx-auto py-3 px-6">
+              <div className="flex items-center gap-3 mb-2">
+                <BarChart2 className="w-4 h-4 text-blue-400" />
+                <span className="text-xs text-blue-400 font-bold uppercase tracking-wider">Market News</span>
+              </div>
+              <div className="max-h-24 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                <div className="space-y-2">
+                  {currentWeekNews.map((newsItem, idx) => (
+                    <div key={idx} className="flex items-start gap-3 text-sm">
+                      <span className="text-gray-500 text-xs min-w-[60px]">
+                        {new Date(newsItem.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                      <p className="text-gray-200 leading-snug flex-1">{newsItem.headline}</p>
+                      {newsItem.source && (
+                        <span className="text-gray-500 text-xs">{newsItem.source}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <main className="flex-1 flex overflow-hidden">
           {/* Chart Area */}
-          <div className="flex-1 p-6 relative flex flex-col">
-            <div className="flex-1 min-h-[400px] flex flex-col">
+          <div className="flex-1 p-4 relative flex flex-col">
+            <div className="flex-1 min-h-[350px] flex flex-col">
               <GameChart
                 contextCandles={scenario.contextCandles}
                 gameCandles={scenario.gameCandles}
@@ -429,47 +457,26 @@ export default function GamePage() {
                 gameState={gameState}
               />
             </div>
-
-            {/* News Overlay */}
-            <AnimatePresence>
-              {showNews && news && (
-                <motion.div
-                  initial={{ y: 50, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: 50, opacity: 0 }}
-                  className="absolute bottom-8 left-8 right-8 bg-white/10 backdrop-blur-md border border-white/20 p-6 rounded-xl max-w-2xl mx-auto"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="p-3 rounded-full bg-blue-500/20 text-blue-400">
-                      <BarChart2 size={24} />
-                    </div>
-                    <div>
-                      <h4 className="text-sm text-blue-300 font-bold mb-1 uppercase tracking-wider">Breaking News</h4>
-                      <p className="text-xl font-medium leading-relaxed">{news.headline}</p>
-                      <p className="text-sm text-gray-400 mt-2">{new Date(news.date).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
 
           {/* Sidebar Controls */}
-          <div className="w-96 border-l border-white/10 bg-black/20 backdrop-blur p-6 flex flex-col gap-6">
-            <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-              <p className="text-sm text-gray-400 mb-1">Current Price</p>
-              <p className="text-4xl font-bold text-white">${currentCandle.close.toFixed(2)}</p>
-              <div className={`flex items - center gap - 2 mt - 2 text - sm ${currentCandle.close >= currentCandle.open ? 'text-green-400' : 'text-red-400'} `}>
-                {currentCandle.close >= currentCandle.open ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+          <div className="w-80 border-l border-white/10 bg-black/20 backdrop-blur p-4 flex flex-col gap-4">
+            {/* Current Price - Compact */}
+            <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+              <p className="text-xs text-gray-400 mb-1">Current Price</p>
+              <p className="text-3xl font-bold text-white">${currentCandle.close.toFixed(2)}</p>
+              <div className={`flex items-center gap-1 mt-1 text-sm ${currentCandle.close >= currentCandle.open ? 'text-green-400' : 'text-red-400'}`}>
+                {currentCandle.close >= currentCandle.open ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                 {((currentCandle.close - currentCandle.open) / currentCandle.open * 100).toFixed(2)}%
               </div>
             </div>
 
+            {/* Position */}
             {position && (
-              <div className={`p-4 rounded-xl border ${position.shares > 0 ? 'bg-purple-500/10 border-purple-500/30' : 'bg-orange-500/10 border-orange-500/30'}`}>
+              <div className={`p-3 rounded-xl border ${position.shares > 0 ? 'bg-purple-500/10 border-purple-500/30' : 'bg-orange-500/10 border-orange-500/30'}`}>
                 <div className="flex justify-between items-center mb-2">
-                  <span className={`${position.shares > 0 ? 'text-purple-300' : 'text-orange-300'} font-bold`}>Current Position</span>
-                  <span className={`text-xs px-2 py-1 rounded ${position.shares > 0 ? 'bg-purple-500/20 text-purple-300' : 'bg-orange-500/20 text-orange-300'}`}>
+                  <span className={`${position.shares > 0 ? 'text-purple-300' : 'text-orange-300'} font-bold text-sm`}>Position</span>
+                  <span className={`text-xs px-2 py-0.5 rounded ${position.shares > 0 ? 'bg-purple-500/20 text-purple-300' : 'bg-orange-500/20 text-orange-300'}`}>
                     {position.shares > 0 ? 'LONG' : 'SHORT'}
                   </span>
                 </div>
@@ -484,7 +491,8 @@ export default function GamePage() {
               </div>
             )}
 
-            <div className="flex-1 flex flex-col justify-end gap-4">
+            {/* Trading Controls */}
+            <div className="flex-1 flex flex-col justify-end gap-3">
               <ShareInput
                 price={currentCandle.close}
                 maxCapital={availableCash}
@@ -492,13 +500,13 @@ export default function GamePage() {
                 disabled={roundPhase !== "decision"}
               />
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => handleTrade("BUY")}
                   disabled={roundPhase !== "decision" || selectedShares === 0}
-                  className="py-4 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:hover:bg-green-600 text-white font-bold transition flex flex-col items-center gap-1"
+                  className="py-3 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:hover:bg-green-600 text-white font-bold transition flex flex-col items-center gap-0.5"
                 >
-                  <span className="text-lg">
+                  <span className="text-base">
                     {position?.shares && position.shares < 0 ? 'COVER' : 'BUY'}
                   </span>
                   <span className="text-xs opacity-75 font-normal">
@@ -509,9 +517,9 @@ export default function GamePage() {
                 <button
                   onClick={() => handleTrade("SELL")}
                   disabled={roundPhase !== "decision" || selectedShares === 0}
-                  className="py-4 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:hover:bg-red-600 text-white font-bold transition flex flex-col items-center gap-1"
+                  className="py-3 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:hover:bg-red-600 text-white font-bold transition flex flex-col items-center gap-0.5"
                 >
-                  <span className="text-lg">
+                  <span className="text-base">
                     {position?.shares && position.shares > 0 ? 'SELL' : 'SHORT'}
                   </span>
                   <span className="text-xs opacity-75 font-normal">
@@ -523,7 +531,7 @@ export default function GamePage() {
               <button
                 onClick={() => handleTrade("HOLD")}
                 disabled={roundPhase !== "decision"}
-                className="w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-50 text-gray-300 font-medium transition"
+                className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-50 text-gray-300 font-medium transition text-sm"
               >
                 DO NOTHING (HOLD)
               </button>
@@ -533,6 +541,7 @@ export default function GamePage() {
       </div>
     );
   }
+
 
   // --- COMPLETED STATE ---
   if (gameState === "completed" && scenario) {
