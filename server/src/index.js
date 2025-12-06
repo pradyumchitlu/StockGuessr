@@ -11,9 +11,17 @@ const scenarioRoutes = require('./routes/scenarios');
 
 const app = express();
 const server = http.createServer(app);
+
+// Allow multiple origins for development
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  process.env.CORS_ORIGIN
+].filter(Boolean);
+
 const io = socketIo(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: allowedOrigins,
     credentials: true,
   },
 });
@@ -21,7 +29,7 @@ const io = socketIo(server, {
 // Middleware
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: allowedOrigins,
     credentials: true,
   })
 );
@@ -61,7 +69,7 @@ io.on('connection', (socket) => {
   socket.on('join_match', (data) => {
     const { matchId, userId } = data;
     const roomName = `match_${matchId}`;
-    
+
     socket.join(roomName);
     activeMatches.set(roomName, true);
 
