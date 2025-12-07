@@ -21,6 +21,17 @@ A real-time 1v1 competitive trading game where players trade on hidden historica
 - **Performance Metrics**: Detailed breakdown of your trades vs. opponent's trades
 - **Personal Journal**: Add notes to matches to track learning and strategy
 
+## 📸 Screenshots
+
+### Landing Page
+![Landing Page](screenshots/landing.png)
+
+### Gameplay
+![Gameplay](screenshots/gameplay.png)
+
+### Results & Analysis
+![Analysis](screenshots/analysis.png)
+
 ## 🛠 Tech Stack
 
 ### Frontend

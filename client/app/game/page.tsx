@@ -13,6 +13,8 @@ import ShareInput from "@/components/ShareInput";
 import GameChart from "@/components/GameChart";
 import Lobby from "@/components/Lobby";
 import { io, Socket } from "socket.io-client";
+import TutorialOverlay from "@/components/TutorialOverlay";
+
 
 interface Candle {
   date: string;
@@ -331,6 +333,7 @@ export default function GamePage() {
   if (gameState === "lobby") {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 relative overflow-hidden">
+        <TutorialOverlay onComplete={() => { }} />
         <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
         <div className="absolute w-96 h-96 bg-purple-600/20 rounded-full blur-3xl -top-20 -left-20 animate-pulse" />
 
@@ -358,6 +361,7 @@ export default function GamePage() {
             </div>
           </div>
 
+
           <h2 className="text-3xl font-bold text-white mb-4">Waiting for Opponent</h2>
 
           {matchData?.joinCode && (
@@ -384,7 +388,7 @@ export default function GamePage() {
   // --- PLAYING STATE ---
   if (gameState === "playing" && scenario) {
     const currentCandle = scenario.gameCandles[currentWeek];
-    const news = scenario.news.find(n => n.week === currentWeek + 1);
+    const currentWeekNews = scenario.news.filter(n => n.week === currentWeek + 1);
 
     return (
       <div className="min-h-screen bg-black text-white flex flex-col">
