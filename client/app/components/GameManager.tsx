@@ -11,6 +11,7 @@ import GameTimer from "@/components/GameTimer";
 import ShareInput from "@/components/ShareInput";
 import GameChart from "@/components/GameChart";
 import Lobby from "@/components/Lobby";
+import LeverageSlider from "@/components/LeverageSlider";
 import { io, Socket } from "socket.io-client";
 import TutorialOverlay from "@/components/TutorialOverlay";
 
@@ -52,7 +53,7 @@ interface Trade {
 }
 
 type GamePhase = "lobby" | "waiting" | "playing" | "completed" | "error";
-type RoundPhase = "reveal" | "decision" | "waiting_for_next_round";
+type RoundPhase = "reveal" | "decision" | "waiting_for_next_round" | "countdown";
 
 const ROUND_DURATION = 12; // Total seconds per week
 const DECISION_DURATION = 7; // Seconds for decision
@@ -69,7 +70,7 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
     const [scenario, setScenario] = useState<Scenario | null>(null);
     const [gameState, setGameState] = useState<GamePhase>("lobby");
     const [currentWeek, setCurrentWeek] = useState(0);
-    const [roundPhase, setRoundPhase] = useState<RoundPhase>("reveal");
+    const [roundPhase, setRoundPhase] = useState<RoundPhase>("countdown");
     const [matchData, setMatchData] = useState<any>(null);
     const [socket, setSocket] = useState<Socket | null>(null);
     const [opponent, setOpponent] = useState<any>(null);
@@ -81,11 +82,15 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
     const [position, setPosition] = useState<{ shares: number; entryPrice: number; entryWeek: number } | null>(null);
     const [trades, setTrades] = useState<Trade[]>([]);
     const [selectedShares, setSelectedShares] = useState(0);
+    const [leverage, setLeverage] = useState(1);
 
     // UI State
     const [isLoadingScenario, setIsLoadingScenario] = useState(false);
     const [showNews, setShowNews] = useState(false);
     const [autoJoinAttempted, setAutoJoinAttempted] = useState(false);
+    const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+    const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
+    const [countdownSeconds, setCountdownSeconds] = useState(0);
 
     // Auth Check
     useEffect(() => {
@@ -130,7 +135,7 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
         setMatchData(match);
 
         // Connect Socket
-        const newSocket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000');
+        const newSocket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5001');
         setSocket(newSocket);
 
         newSocket.on('connect', () => {
@@ -145,10 +150,18 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
 
         newSocket.on('match_ready', async () => {
             console.log('Match Ready!');
-            await fetchScenario(match.stockScenario._id || match.stockScenario);
+            // Check if scenario is embedded in match data (new AI-generated scenarios)
+            if (match.stockScenario && typeof match.stockScenario === 'object' && match.stockScenario.contextCandles) {
+                console.log('Using embedded scenario from match');
+                setScenario(match.stockScenario);
+            } else {
+                // Fall back to fetching by ID for legacy matches
+                await fetchScenario(match.stockScenario?._id || match.stockScenario);
+            }
             setGameState("playing");
             setCurrentWeek(0);
-            setRoundPhase("reveal");
+            // Don't set roundPhase here - let the server's match_state control the phase
+            // The server will send 'countdown' first, then 'reveal'
         });
 
         newSocket.on('match_state', (state: any) => {
@@ -157,9 +170,20 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
             setRoundPhase(state.phase);
             setRoundEndTime(state.endTime);
 
-            if (state.phase === 'reveal') {
+            if (state.phase === 'countdown') {
+                // Calculate countdown seconds from endTime
+                const remaining = Math.ceil((state.endTime - Date.now()) / 1000);
+                setCountdownSeconds(remaining > 0 ? remaining : 0);
+                // Start a local countdown interval
+                const interval = setInterval(() => {
+                    const left = Math.ceil((state.endTime - Date.now()) / 1000);
+                    setCountdownSeconds(left > 0 ? left : 0);
+                    if (left <= 0) clearInterval(interval);
+                }, 100);
+            } else if (state.phase === 'reveal') {
                 setHasTradedThisRound(false);
                 setShowNews(true);
+                setCountdownSeconds(0);
             } else if (state.phase === 'decision') {
                 setShowNews(false);
             } else if (state.phase === 'completed') {
@@ -180,6 +204,11 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
     };
 
     const fetchScenario = async (scenarioId: string) => {
+        if (!scenarioId) {
+            console.error("No scenarioId provided");
+            setGameState("error");
+            return;
+        }
         try {
             setIsLoadingScenario(true);
             const response = await scenariosAPI.getScenarioById(scenarioId);
@@ -228,65 +257,138 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
 
         if (action === "BUY") {
             if (selectedShares > 0) {
-                const cost = selectedShares * price;
-                if (newCash >= cost) {
-                    newCash -= cost;
-                    if (!newPosition) {
+                const positionValue = selectedShares * price;
+                const marginRequired = positionValue / leverage;
+
+                if (!newPosition) {
+                    // Opening new LONG position
+                    if (newCash >= marginRequired) {
+                        newCash -= marginRequired;
                         newPosition = { shares: selectedShares, entryPrice: price, entryWeek: currentWeek };
+                        newTrade.shares = selectedShares;
                     } else {
-                        const totalShares = newPosition.shares + selectedShares;
-                        if (totalShares === 0) {
-                            pnl = (newPosition.entryPrice - price) * Math.abs(newPosition.shares);
-                            newTrade.pnl = pnl;
-                            newPosition = null;
-                        } else if (newPosition.shares < 0) {
-                            pnl = (newPosition.entryPrice - price) * selectedShares;
-                            newTrade.pnl = pnl;
-                            newPosition.shares = totalShares;
-                        } else {
-                            newPosition = {
-                                shares: totalShares,
-                                entryPrice: ((newPosition.shares * newPosition.entryPrice) + cost) / totalShares,
-                                entryWeek: newPosition.entryWeek
-                            };
+                        alert("Not enough cash for margin!");
+                        return;
+                    }
+                } else if (newPosition.shares < 0) {
+                    // Covering SHORT position
+                    const sharesToCover = Math.min(selectedShares, Math.abs(newPosition.shares));
+                    const remainingBuyShares = selectedShares - sharesToCover;
+
+                    // PnL from covering short: (entry - current) * shares covered
+                    pnl = (newPosition.entryPrice - price) * sharesToCover;
+                    newTrade.pnl = pnl;
+                    newTrade.shares = selectedShares;
+
+                    // Return margin from closed short + PnL
+                    const marginReturned = (sharesToCover * newPosition.entryPrice) / leverage;
+                    newCash += marginReturned + pnl;
+
+                    const totalShares = newPosition.shares + sharesToCover;
+
+                    if (totalShares === 0) {
+                        newPosition = null;
+                    } else {
+                        newPosition.shares = totalShares;
+                    }
+
+                    // If buying more than covering, open new long
+                    if (remainingBuyShares > 0 && newPosition === null) {
+                        const newMargin = (remainingBuyShares * price) / leverage;
+                        if (newCash >= newMargin) {
+                            newCash -= newMargin;
+                            newPosition = { shares: remainingBuyShares, entryPrice: price, entryWeek: currentWeek };
                         }
                     }
-                    newTrade.shares = selectedShares;
                 } else {
-                    alert("Not enough cash!");
-                    return;
+                    // Adding to LONG position
+                    const additionalMargin = positionValue / leverage;
+                    if (newCash >= additionalMargin) {
+                        newCash -= additionalMargin;
+                        const totalShares = newPosition.shares + selectedShares;
+                        const totalCost = (newPosition.shares * newPosition.entryPrice) + positionValue;
+                        newPosition = {
+                            shares: totalShares,
+                            entryPrice: totalCost / totalShares,
+                            entryWeek: newPosition.entryWeek
+                        };
+                        newTrade.shares = selectedShares;
+                    } else {
+                        alert("Not enough cash for margin!");
+                        return;
+                    }
                 }
             }
         } else if (action === "SELL") {
-            if (selectedShares > 0) {
-                const proceeds = selectedShares * price;
-                newCash += proceeds;
+            // Determine shares to sell: use selectedShares if set, otherwise sell entire position if exists
+            let sharesToUse = selectedShares;
+            if (sharesToUse === 0 && newPosition && newPosition.shares > 0) {
+                // Default to selling entire long position
+                sharesToUse = newPosition.shares;
+            }
+
+            if (sharesToUse > 0) {
+                const positionValue = sharesToUse * price;
+                const marginRequired = positionValue / leverage;
+
                 if (!newPosition) {
-                    if (proceeds <= availableCash) {
-                        newPosition = { shares: -selectedShares, entryPrice: price, entryWeek: currentWeek };
+                    // Opening new SHORT position
+                    if (newCash >= marginRequired) {
+                        newCash -= marginRequired;
+                        newPosition = { shares: -sharesToUse, entryPrice: price, entryWeek: currentWeek };
+                        newTrade.shares = sharesToUse;
                     } else {
-                        alert("Margin limit reached (1x leverage)");
+                        alert("Not enough cash for margin!");
                         return;
                     }
-                } else {
-                    const totalShares = newPosition.shares - selectedShares;
+                } else if (newPosition.shares > 0) {
+                    // Closing LONG position
+                    const sharesToSell = Math.min(sharesToUse, newPosition.shares);
+                    const remainingSellShares = sharesToUse - sharesToSell;
+
+                    // PnL from selling long: (current - entry) * shares sold
+                    pnl = (price - newPosition.entryPrice) * sharesToSell;
+                    newTrade.pnl = pnl;
+                    newTrade.shares = sharesToUse;
+
+                    // Return margin from closed long + PnL
+                    const marginReturned = (sharesToSell * newPosition.entryPrice) / leverage;
+                    newCash += marginReturned + pnl;
+
+                    const totalShares = newPosition.shares - sharesToSell;
+
                     if (totalShares === 0) {
-                        pnl = (price - newPosition.entryPrice) * newPosition.shares;
-                        newTrade.pnl = pnl;
                         newPosition = null;
-                    } else if (newPosition.shares > 0) {
-                        pnl = (price - newPosition.entryPrice) * selectedShares;
-                        newTrade.pnl = pnl;
-                        newPosition.shares = totalShares;
                     } else {
+                        newPosition.shares = totalShares;
+                    }
+
+                    // If selling more than position, open new short
+                    if (remainingSellShares > 0 && newPosition === null) {
+                        const newMargin = (remainingSellShares * price) / leverage;
+                        if (newCash >= newMargin) {
+                            newCash -= newMargin;
+                            newPosition = { shares: -remainingSellShares, entryPrice: price, entryWeek: currentWeek };
+                        }
+                    }
+                } else {
+                    // Adding to SHORT position
+                    const additionalMargin = positionValue / leverage;
+                    if (newCash >= additionalMargin) {
+                        newCash -= additionalMargin;
+                        const totalShares = newPosition.shares - sharesToUse;
+                        const totalValue = (Math.abs(newPosition.shares) * newPosition.entryPrice) + positionValue;
                         newPosition = {
                             shares: totalShares,
-                            entryPrice: ((Math.abs(newPosition.shares) * newPosition.entryPrice) + proceeds) / Math.abs(totalShares),
+                            entryPrice: totalValue / Math.abs(totalShares),
                             entryWeek: newPosition.entryWeek
                         };
+                        newTrade.shares = sharesToUse;
+                    } else {
+                        alert("Not enough cash for margin!");
+                        return;
                     }
                 }
-                newTrade.shares = selectedShares;
             }
         }
 
@@ -298,7 +400,15 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
         setRoundPhase("waiting_for_next_round");
 
         // Calculate current equity for broadcast
-        const currentEquity = newCash + (newPosition ? newPosition.shares * price : 0);
+        // Equity = Cash + Margin held in position + Unrealized PnL
+        let currentEquity = newCash;
+        if (newPosition) {
+            const marginInPosition = (Math.abs(newPosition.shares) * newPosition.entryPrice) / leverage;
+            const unrealizedPnL = newPosition.shares > 0
+                ? (price - newPosition.entryPrice) * newPosition.shares  // Long PnL
+                : (newPosition.entryPrice - price) * Math.abs(newPosition.shares); // Short PnL
+            currentEquity = newCash + marginInPosition + unrealizedPnL;
+        }
 
         // Emit trade to opponent
         if (socket && matchData) {
@@ -310,16 +420,21 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
                 week: currentWeek,
                 pnl,
                 shares: selectedShares,
-                equity: currentEquity // Send equity
+                equity: currentEquity
             });
         }
 
         // Check for Game Over locally if it's the last week
         if (currentWeek >= 3) {
+            const lastPrice = scenario.gameCandles[3].close;
             let finalEquity = newCash;
             if (newPosition) {
-                const lastPrice = scenario.gameCandles[3].close;
-                finalEquity += newPosition.shares * lastPrice;
+                // Close position at market - return margin + final PnL
+                const marginInPosition = (Math.abs(newPosition.shares) * newPosition.entryPrice) / leverage;
+                const finalPnL = newPosition.shares > 0
+                    ? (lastPrice - newPosition.entryPrice) * newPosition.shares
+                    : (newPosition.entryPrice - lastPrice) * Math.abs(newPosition.shares);
+                finalEquity = newCash + marginInPosition + finalPnL;
             }
             endGame(finalEquity, newPosition);
         }
@@ -329,6 +444,8 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
         if (!scenario || !matchData) return;
 
         let calculatedEquity = finalEquity;
+        let finalTrades = [...trades]; // Create a copy of trades
+
         if (finalPos) {
             const lastPrice = scenario.gameCandles[3].close;
 
@@ -342,7 +459,8 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
                     : (finalPos.entryPrice - lastPrice) * Math.abs(finalPos.shares), // Short PnL
                 timestamp: new Date(),
             };
-            setTrades(prev => [...prev, closeTrade]);
+            finalTrades.push(closeTrade); // Add closeTrade to our local copy
+            setTrades(finalTrades); // Update state with all trades
         }
 
         setAvailableCash(finalEquity);
@@ -351,11 +469,23 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
         try {
             await matchesAPI.updateMatch(matchData._id, {
                 [matchData.player1.userId === user?._id ? 'player1FinalEquity' : 'player2FinalEquity']: calculatedEquity,
-                [matchData.player1.userId === user?._id ? 'player1Trades' : 'player2Trades']: trades,
+                [matchData.player1.userId === user?._id ? 'player1Trades' : 'player2Trades']: finalTrades, // Use finalTrades
                 status: "completed"
             });
         } catch (error) {
             console.error("Failed to save match results:", error);
+        }
+
+        // Fetch AI analysis after game completion
+        try {
+            setIsLoadingAnalysis(true);
+            const response = await scenariosAPI.analyzeGame(finalTrades, scenario.gameCandles, finalEquity); // Use finalTrades
+            setAiAnalysis(response.data.analysis);
+        } catch (error) {
+            console.error("Failed to get AI analysis:", error);
+            setAiAnalysis(null);
+        } finally {
+            setIsLoadingAnalysis(false);
         }
     };
 
@@ -445,12 +575,40 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
 
         return (
             <div className="min-h-screen bg-black text-white flex flex-col">
+                {/* Countdown Overlay */}
+                {roundPhase === 'countdown' && countdownSeconds > 0 && (
+                    <div className="fixed inset-0 bg-black/80 z-[100] flex flex-col items-center justify-center">
+                        <div className="text-center">
+                            <p className="text-gray-400 text-lg mb-4">Game Starting In</p>
+                            <div className="text-9xl font-black text-purple-500 animate-pulse">
+                                {countdownSeconds}
+                            </div>
+                            <p className="text-gray-500 text-sm mt-6">Get ready to trade!</p>
+                        </div>
+                    </div>
+                )}
                 {/* Top Bar */}
                 <header className="h-14 border-b border-white/10 flex items-center justify-between px-6 bg-black/50 backdrop-blur sticky top-0 z-50">
                     <div className="flex items-center gap-4">
                         <div className="px-3 py-1 rounded bg-purple-500/20 text-purple-300 text-sm font-bold">
                             Week {currentWeek + 1} / 4
                         </div>
+                        {/* Phase Indicator */}
+                        {roundPhase === "reveal" && (
+                            <div className="px-3 py-1 rounded bg-blue-500/20 text-blue-300 text-sm font-bold flex items-center gap-2 animate-pulse">
+                                <span>📊</span> REVEAL PHASE
+                            </div>
+                        )}
+                        {roundPhase === "decision" && (
+                            <div className="px-3 py-1 rounded bg-green-500/20 text-green-300 text-sm font-bold flex items-center gap-2">
+                                <span>💹</span> MAKE YOUR TRADE
+                            </div>
+                        )}
+                        {roundPhase === "waiting_for_next_round" && (
+                            <div className="px-3 py-1 rounded bg-yellow-500/20 text-yellow-300 text-sm font-bold flex items-center gap-2">
+                                <span>⏳</span> WAITING...
+                            </div>
+                        )}
                         <div className="w-48">
                             <GameTimer
                                 duration={DECISION_DURATION}
@@ -458,18 +616,7 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
                                 isActive={roundPhase === "decision" || roundPhase === "waiting_for_next_round" || roundPhase === "reveal"}
                                 onComplete={handleRoundComplete}
                             />
-                            {/* DEBUG OVERLAY */}
-                            <div className="absolute top-16 left-0 bg-red-500/80 text-white text-xs p-2 z-[100]">
-                                <p>Phase: {roundPhase}</p>
-                                <p>EndTime: {roundEndTime}</p>
-                                <p>Now: {Date.now()}</p>
-                                <p>Diff: {Math.ceil((roundEndTime - Date.now()) / 1000)}s</p>
-                                <p>Traded: {hasTradedThisRound ? 'YES' : 'NO'}</p>
-                            </div>
                         </div>
-                        {roundPhase === "waiting_for_next_round" && (
-                            <span className="text-xs text-yellow-400 animate-pulse">Waiting for round end...</span>
-                        )}
                     </div>
 
                     <div className="flex items-center gap-8">
@@ -490,7 +637,17 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
                             <div className="text-right">
                                 <p className="text-xs text-gray-400 uppercase tracking-wider">Equity</p>
                                 <p className="text-xl font-mono font-bold text-green-400">
-                                    ${(availableCash + (position ? position.shares * currentCandle.close : 0)).toLocaleString()}
+                                    ${(() => {
+                                        let equity = availableCash;
+                                        if (position) {
+                                            const marginInPosition = (Math.abs(position.shares) * position.entryPrice) / leverage;
+                                            const unrealizedPnL = position.shares > 0
+                                                ? (currentCandle.close - position.entryPrice) * position.shares
+                                                : (position.entryPrice - currentCandle.close) * Math.abs(position.shares);
+                                            equity = availableCash + marginInPosition + unrealizedPnL;
+                                        }
+                                        return equity.toLocaleString();
+                                    })()}
                                 </p>
                             </div>
                             <div className="text-right">
@@ -575,11 +732,18 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
 
                         {/* Trading Controls */}
                         <div className="flex-1 flex flex-col justify-end gap-3">
+                            <LeverageSlider
+                                value={leverage}
+                                onChange={setLeverage}
+                                disabled={roundPhase !== "decision" || hasTradedThisRound || !!position}
+                            />
+
                             <ShareInput
                                 price={currentCandle.close}
                                 maxCapital={availableCash}
                                 onChange={setSelectedShares}
                                 disabled={roundPhase !== "decision" || hasTradedThisRound}
+                                leverage={leverage}
                             />
 
                             <div className="grid grid-cols-2 gap-2">
@@ -598,7 +762,7 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
 
                                 <button
                                     onClick={() => handleTrade("SELL")}
-                                    disabled={roundPhase !== "decision" || selectedShares === 0 || hasTradedThisRound}
+                                    disabled={roundPhase !== "decision" || (selectedShares === 0 && !(position && position.shares > 0)) || hasTradedThisRound}
                                     className="py-3 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:hover:bg-red-600 text-white font-bold transition flex flex-col items-center gap-0.5"
                                 >
                                     <span className="text-base">
@@ -669,22 +833,36 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
                                 <div className="flex justify-between">
                                     <span className="text-gray-500">Best Trade</span>
                                     <span className={(() => {
-                                        const pnlTrades = trades.filter(t => typeof t.pnl === 'number');
-                                        if (pnlTrades.length === 0) return 'text-gray-400';
-                                        const best = Math.max(...pnlTrades.map(t => t.pnl!));
-                                        return best >= 0 ? 'text-green-400' : 'text-red-400';
+                                        const pnlTrades = trades.filter(t => t.pnl !== undefined && t.pnl !== 0);
+                                        if (pnlTrades.length === 0) {
+                                            // Check if there's any non-zero pnl
+                                            const anyPnl = trades.find(t => t.pnl !== undefined && t.pnl !== 0);
+                                            if (!anyPnl) return 'text-gray-400';
+                                        }
+                                        const allPnls = trades.filter(t => t.pnl !== undefined).map(t => t.pnl!);
+                                        if (allPnls.length === 0) return 'text-gray-400';
+                                        const best = Math.max(...allPnls);
+                                        return best > 0 ? 'text-green-400' : best < 0 ? 'text-red-400' : 'text-gray-400';
                                     })()}>
                                         {(() => {
-                                            const pnlTrades = trades.filter(t => typeof t.pnl === 'number');
+                                            const pnlTrades = trades.filter(t => t.pnl !== undefined);
                                             if (pnlTrades.length === 0) return 'N/A';
-                                            const best = Math.max(...pnlTrades.map(t => t.pnl!));
+                                            const allPnls = pnlTrades.map(t => t.pnl!);
+                                            const best = Math.max(...allPnls);
+                                            if (best === 0) return '$0';
                                             return (best >= 0 ? '+' : '') + '$' + best.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
                                         })()}
                                     </span>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-500">Difficulty</span>
-                                    <span className="capitalize">{scenario.difficulty.toLowerCase()}</span>
+                                <div className="mt-4 pt-4 border-t border-white/10">
+                                    <span className="text-gray-500 text-sm">AI Analysis</span>
+                                    {isLoadingAnalysis ? (
+                                        <p className="text-gray-400 text-sm mt-2 italic">Analyzing your trades...</p>
+                                    ) : aiAnalysis ? (
+                                        <p className="text-gray-200 text-sm mt-2 leading-relaxed">{aiAnalysis}</p>
+                                    ) : (
+                                        <p className="text-gray-400 text-sm mt-2 italic">Analysis unavailable</p>
+                                    )}
                                 </div>
                             </div>
                         </div>

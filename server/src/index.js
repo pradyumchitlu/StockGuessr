@@ -63,28 +63,35 @@ app.get('/', (req, res) => {
 const activeMatches = new Map();
 
 const ROUND_DURATION = 12 * 1000; // 12 seconds
-const DECISION_DURATION = 7 * 1000; // 7 seconds
+const DECISION_DURATION = 9 * 1000; // 9 seconds
+const COUNTDOWN_DURATION = 5 * 1000; // 5 seconds before game starts
 
 function startGameLoop(roomName, io) {
-  if (activeMatches.has(roomName)) return;
+  if (activeMatches.has(roomName)) {
+    console.log(`[GameLoop] Match ${roomName} already active, skipping`);
+    return;
+  }
 
-  let currentWeek = 0;
-  let phase = 'reveal'; // reveal -> decision -> waiting_for_next_round
+  console.log(`[GameLoop] Starting game loop for ${roomName}`);
 
   const matchState = {
     currentWeek: 0,
-    phase: 'reveal',
-    endTime: Date.now() + (ROUND_DURATION - DECISION_DURATION),
+    phase: 'countdown',
+    endTime: Date.now() + COUNTDOWN_DURATION,
     isRunning: true
   };
 
   activeMatches.set(roomName, matchState);
 
   const loop = async () => {
-    if (!activeMatches.has(roomName)) return;
+    if (!activeMatches.has(roomName)) {
+      console.log(`[GameLoop] Match ${roomName} no longer active, exiting`);
+      return;
+    }
     const state = activeMatches.get(roomName);
 
     // Phase: REVEAL (showing chart)
+    console.log(`[GameLoop] ${roomName} Week ${state.currentWeek} - REVEAL phase`);
     state.phase = 'reveal';
     state.endTime = Date.now() + (ROUND_DURATION - DECISION_DURATION);
     io.to(roomName).emit('match_state', state);
@@ -93,6 +100,7 @@ function startGameLoop(roomName, io) {
     if (!activeMatches.has(roomName)) return;
 
     // Phase: DECISION (trading allowed)
+    console.log(`[GameLoop] ${roomName} Week ${state.currentWeek} - DECISION phase`);
     state.phase = 'decision';
     state.endTime = Date.now() + DECISION_DURATION;
     io.to(roomName).emit('match_state', state);
@@ -102,8 +110,10 @@ function startGameLoop(roomName, io) {
 
     // Phase: END OF ROUND (advance week)
     state.currentWeek++;
-    
+    console.log(`[GameLoop] ${roomName} - Advanced to week ${state.currentWeek}`);
+
     if (state.currentWeek >= 4) { // 4 weeks total (0-3)
+      console.log(`[GameLoop] ${roomName} - Game completed`);
       state.phase = 'completed';
       state.isRunning = false;
       io.to(roomName).emit('match_state', state);
@@ -115,7 +125,14 @@ function startGameLoop(roomName, io) {
     }
   };
 
-  loop();
+  // Start with 5-second countdown
+  console.log(`[GameLoop] ${roomName} - 5 second countdown starting`);
+  io.to(roomName).emit('match_state', matchState);
+
+  setTimeout(() => {
+    if (!activeMatches.has(roomName)) return;
+    loop();
+  }, COUNTDOWN_DURATION);
 }
 
 io.on('connection', (socket) => {
@@ -143,7 +160,7 @@ io.on('connection', (socket) => {
     // If 2 players, check if we need to start or sync
     if (playerCount === 2) {
       io.to(roomName).emit('match_ready', { start: true });
-      
+
       if (!activeMatches.has(roomName)) {
         startGameLoop(roomName, io);
       } else {
@@ -151,8 +168,8 @@ io.on('connection', (socket) => {
         socket.emit('match_state', activeMatches.get(roomName));
       }
     } else if (activeMatches.has(roomName)) {
-       // If rejoining an active match (and somehow playerCount != 2, e.g. observer?), send current state
-       socket.emit('match_state', activeMatches.get(roomName));
+      // If rejoining an active match (and somehow playerCount != 2, e.g. observer?), send current state
+      socket.emit('match_state', activeMatches.get(roomName));
     }
   });
 

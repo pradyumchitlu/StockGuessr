@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useMotionValue, useSpring } from "framer-motion";
+import { motion, useMotionValue, useSpring, Variants } from "framer-motion";
 import { ArrowRight, TrendingUp, Zap, Trophy, Target, Clock, BarChart3, Brain, Users2, DollarSign, Newspaper, CheckCircle2, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useState, useRef } from "react";
@@ -34,7 +34,7 @@ export default function LandingPage() {
   const [cash, setCash] = useState(100000);
   const [equity, setEquity] = useState(100000);
 
-  const containerVariants = {
+  const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
@@ -42,12 +42,12 @@ export default function LandingPage() {
     },
   };
 
-  const itemVariants = {
+  const itemVariants: Variants = {
     hidden: { opacity: 0, y: 20 },
     visible: {
       opacity: 1,
       y: 0,
-      transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
+      transition: { duration: 0.5, ease: "easeOut" },
     },
   };
 
@@ -223,7 +223,7 @@ export default function LandingPage() {
                 >
                   <motion.div
                     className="absolute inset-0 bg-white/10"
-                    initial={{ x: '-100%', skew: -10 }}
+                    initial={{ x: '-100%', skewX: -10 }}
                     whileHover={{ x: '200%' }}
                     transition={{ duration: 0.6 }}
                   />
@@ -487,11 +487,10 @@ export default function LandingPage() {
               {/* Trading Actions */}
               <div className="grid grid-cols-3 gap-4 mb-6">
                 <motion.button
-                  className={`py-4 rounded-xl font-bold text-lg transition-all ${
-                    position === "long"
-                      ? "bg-green-600 text-white shadow-lg shadow-green-500/30"
-                      : "bg-slate-800 text-slate-300 hover:bg-green-600/20 border border-slate-700"
-                  }`}
+                  className={`py-4 rounded-xl font-bold text-lg transition-all ${position === "long"
+                    ? "bg-green-600 text-white shadow-lg shadow-green-500/30"
+                    : "bg-slate-800 text-slate-300 hover:bg-green-600/20 border border-slate-700"
+                    }`}
                   onClick={handleBuy}
                   whileHover={{ scale: 1.02, y: -2 }}
                   whileTap={{ scale: 0.98 }}
@@ -512,11 +511,10 @@ export default function LandingPage() {
                 </motion.button>
 
                 <motion.button
-                  className={`py-4 rounded-xl font-bold text-lg transition-all ${
-                    position === "long"
-                      ? "bg-red-600 text-white hover:bg-red-500 shadow-lg shadow-red-500/30"
-                      : "bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed"
-                  }`}
+                  className={`py-4 rounded-xl font-bold text-lg transition-all ${position === "long"
+                    ? "bg-red-600 text-white hover:bg-red-500 shadow-lg shadow-red-500/30"
+                    : "bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed"
+                    }`}
                   onClick={handleSell}
                   whileHover={position === "long" ? { scale: 1.02, y: -2 } : {}}
                   whileTap={position === "long" ? { scale: 0.98 } : {}}

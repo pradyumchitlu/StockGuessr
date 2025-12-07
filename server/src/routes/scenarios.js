@@ -6,9 +6,11 @@ const {
   getRandomHistoricalPeriod,
   fetchOHLCData,
   splitCandlesForGame,
-  classifyDifficulty
+  classifyDifficulty,
+  getCompanyName
 } = require('../utils/stockData');
 const { generateNewsHeadlines } = require('../utils/newsData');
+const { generateTradeAnalysis } = require('../utils/aiAnalysis');
 
 const router = express.Router();
 
@@ -41,8 +43,11 @@ router.get('/generate', authMiddleware, async (req, res, next) => {
       return res.redirect('/api/scenarios/generate');
     }
 
+    // Get company name for anonymization
+    const companyName = await getCompanyName(ticker);
+
     // Generate contextual news headlines using AI
-    const news = await generateNewsHeadlines(ticker, gameCandles, gameCandles[0].date);
+    const news = await generateNewsHeadlines(ticker, gameCandles, gameCandles[0].date, companyName);
 
     // Classify difficulty based on volatility
     const difficulty = classifyDifficulty(gameCandles);
@@ -75,8 +80,7 @@ router.get('/generate', authMiddleware, async (req, res, next) => {
  */
 router.get('/random', authMiddleware, async (req, res, next) => {
   try {
-    // Redirect to generate endpoint for real-time data
-    // Alternatively, we could call the generate logic directly
+    // Generate AI-powered scenario with real market data
     const ticker = getRandomTicker();
     const period = getRandomHistoricalPeriod();
 
@@ -85,30 +89,24 @@ router.get('/random', authMiddleware, async (req, res, next) => {
     const allCandles = await fetchOHLCData(ticker, period.contextStartDate, period.gameEndDate);
 
     if (allCandles.length < 50) {
-      // Fallback to database if Yahoo Finance fails
-      const count = await StockScenario.countDocuments();
-      if (count > 0) {
-        const random = Math.floor(Math.random() * count);
-        const scenario = await StockScenario.findOne().skip(random);
-        return res.json(scenario);
-      }
-      return res.status(503).json({ message: 'Unable to generate scenario, please try again' });
+      // Not enough data, try a different ticker by redirecting
+      console.log(`Not enough data for ${ticker}, retrying...`);
+      return res.redirect('/api/scenarios/random');
     }
 
     const { contextCandles, gameCandles } = splitCandlesForGame(allCandles);
 
     if (gameCandles.length < 20) {
-      // Fallback to database
-      const count = await StockScenario.countDocuments();
-      if (count > 0) {
-        const random = Math.floor(Math.random() * count);
-        const scenario = await StockScenario.findOne().skip(random);
-        return res.json(scenario);
-      }
-      return res.status(503).json({ message: 'Unable to generate scenario, please try again' });
+      // Not enough game candles, retry
+      console.log(`Not enough game candles for ${ticker}, retrying...`);
+      return res.redirect('/api/scenarios/random');
     }
 
-    const news = await generateNewsHeadlines(ticker, gameCandles, gameCandles[0].date);
+    // Get company name for anonymization
+    const companyName = await getCompanyName(ticker);
+
+    // Generate AI news headlines (anonymized)
+    const news = await generateNewsHeadlines(ticker, gameCandles, gameCandles[0].date, companyName);
     const difficulty = classifyDifficulty(gameCandles);
 
     const scenario = {
@@ -124,23 +122,12 @@ router.get('/random', authMiddleware, async (req, res, next) => {
       timesUsed: 0
     };
 
+    console.log(`Generated AI scenario: ${ticker}, ${contextCandles.length} context + ${gameCandles.length} game candles`);
+
     res.json(scenario);
   } catch (error) {
     console.error('Error in random scenario:', error);
-
-    // Fallback to database on any error
-    try {
-      const count = await StockScenario.countDocuments();
-      if (count > 0) {
-        const random = Math.floor(Math.random() * count);
-        const scenario = await StockScenario.findOne().skip(random);
-        return res.json(scenario);
-      }
-    } catch (dbError) {
-      console.error('Database fallback failed:', dbError);
-    }
-
-    next(error);
+    res.status(503).json({ message: 'Unable to generate scenario, please try again' });
   }
 });
 
@@ -165,6 +152,32 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
 
     res.json(scenario);
   } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Analyze trade performance using AI
+ * POST /api/scenarios/analyze
+ */
+router.post('/analyze', authMiddleware, async (req, res, next) => {
+  try {
+    const { trades, gameCandles, finalEquity } = req.body;
+
+    if (!trades || !gameCandles || finalEquity === undefined) {
+      return res.status(400).json({ message: 'Missing required fields: trades, gameCandles, finalEquity' });
+    }
+
+    const analysis = await generateTradeAnalysis({
+      trades,
+      gameCandles,
+      finalEquity,
+      startingEquity: 100000
+    });
+
+    res.json({ analysis });
+  } catch (error) {
+    console.error('Error in trade analysis:', error);
     next(error);
   }
 });

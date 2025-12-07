@@ -22,7 +22,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} ${spaceGrotesk.variable} overflow-x-hidden`}>
+      <body className={`${inter.className} ${spaceGrotesk.variable} overflow-x-hidden`} suppressHydrationWarning>
         <AuthProvider>
           {children}
         </AuthProvider>

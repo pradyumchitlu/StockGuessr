@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api';
 
 console.log('API_BASE_URL:', API_BASE_URL);
 
@@ -52,6 +52,8 @@ export const scenariosAPI = {
   getRandomScenario: () => api.get('/scenarios/random'),
   getAllScenarios: () => api.get('/scenarios'),
   getScenarioById: (id: string) => api.get(`/scenarios/${id}`),
+  analyzeGame: (trades: any[], gameCandles: any[], finalEquity: number) =>
+    api.post('/scenarios/analyze', { trades, gameCandles, finalEquity }),
 };
 
 // Matches endpoints

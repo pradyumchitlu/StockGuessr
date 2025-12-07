@@ -5,10 +5,11 @@ interface ShareInputProps {
     maxCapital: number;
     onChange: (shares: number) => void;
     disabled?: boolean;
+    leverage?: number;
 }
 
-export default function ShareInput({ price, maxCapital, onChange, disabled }: ShareInputProps) {
-    const maxShares = Math.floor(maxCapital / price);
+export default function ShareInput({ price, maxCapital, onChange, disabled, leverage = 1 }: ShareInputProps) {
+    const maxShares = Math.floor((maxCapital * leverage) / price);
     const [shares, setShares] = useState(0);
 
     useEffect(() => {

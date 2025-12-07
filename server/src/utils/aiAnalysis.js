@@ -1,76 +1,52 @@
-const { OpenAI } = require('openai');
+const OpenAI = require('openai');
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-const analyzeTradePerformance = async (
-  playerTrades,
-  stockTicker,
-  stockDate,
-  candles,
-  news,
-  finalEquity
-) => {
+/**
+ * Generate post-game trade analysis using AI
+ * @param {Object} params - Analysis parameters
+ * @param {Array} params.trades - Array of trades made during the game
+ * @param {Array} params.gameCandles - The game candles (price action)
+ * @param {number} params.finalEquity - Final portfolio value
+ * @param {number} params.startingEquity - Starting portfolio value (default 100000)
+ * @returns {Promise<string>} AI-generated analysis
+ */
+const generateTradeAnalysis = async ({ trades, gameCandles, finalEquity, startingEquity = 100000 }) => {
   try {
-    const candleData = candles
-      .map(
-        c =>
-          `${c.date.toISOString().split('T')[0]}: O=${c.open}, H=${c.high}, L=${c.low}, C=${c.close}, V=${c.volume}`
-      )
-      .join('\n');
+    const returnPct = ((finalEquity - startingEquity) / startingEquity * 100).toFixed(2);
 
-    const newsData = news
-      .map(n => `Week ${n.week}: ${n.headline}`)
-      .join('\n');
+    // Calculate stock movement
+    const startPrice = gameCandles[0]?.open || 0;
+    const endPrice = gameCandles[gameCandles.length - 1]?.close || 0;
+    const stockReturn = ((endPrice - startPrice) / startPrice * 100).toFixed(2);
 
-    const tradesData = playerTrades
-      .map(
-        t =>
-          `Week ${t.week}: ${t.action} at $${t.price} (${t.shares} shares) - PnL: $${t.pnl}`
-      )
-      .join('\n');
+    // Summarize trades concisely
+    const tradeSummary = trades
+      .filter(t => t.action !== 'HOLD')
+      .map(t => `W${t.week + 1}:${t.action}@$${t.price?.toFixed(0) || 0}`)
+      .join(', ') || 'No trades';
 
-    const prompt = `You are a professional stock market analyst. Analyze the following trading performance:
+    const prompt = `Trading game result: ${returnPct}% return (stock moved ${stockReturn}%). Trades: ${tradeSummary}. Give a 2-sentence analysis of the trading strategy and result. Be direct and insightful.`;
 
-Stock: ${stockTicker}
-Period: ${stockDate.toISOString().split('T')[0]}
-Final Portfolio Value: $${finalEquity}
-
-Historical Price Data:
-${candleData}
-
-Market News:
-${newsData}
-
-Player Trades:
-${tradesData}
-
-Provide a concise (3-4 sentences) analysis that includes:
-1. What the player did well
-2. What they missed or could improve
-3. One key insight from the data
-
-Keep it friendly and encouraging, like a coach's feedback.`;
-
-    const message = await openai.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 200,
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
       messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
+        { role: 'system', content: 'You are a trading coach giving brief post-game feedback. Be concise and insightful.' },
+        { role: 'user', content: prompt }
       ],
+      max_tokens: 150
     });
 
-    return message.content[0].text;
+    return response.choices[0].message.content.trim();
   } catch (error) {
-    console.error('AI Analysis error:', error);
-    return 'Great effort! You traded strategically during this market period. Keep analyzing news catalysts and price action to improve your entries and exits.';
+    console.error('Error generating trade analysis:', error);
+    if (error.response) console.error('Data:', error.response.data);
+    return 'Great game! Review your trades to see what worked and what could be improved.';
   }
 };
 
 module.exports = {
-  analyzeTradePerformance,
+  generateTradeAnalysis
 };

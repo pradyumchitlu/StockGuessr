@@ -54,10 +54,16 @@ const matchSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+    // Legacy: reference to database scenario (optional for backwards compatibility)
     stockScenario: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'StockScenario',
-      required: true,
+      required: false,
+    },
+    // New: Embedded scenario data for dynamically generated AI scenarios
+    scenarioData: {
+      type: mongoose.Schema.Types.Mixed,
+      required: false,
     },
     stockTicker: String,
     stockDate: Date,

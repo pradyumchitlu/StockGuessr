@@ -1,4 +1,5 @@
-const yahooFinance = require('yahoo-finance2').default;
+const YahooFinance = require('yahoo-finance2').default;
+const yahooFinance = new YahooFinance();
 
 // Curated list of liquid, well-known S&P 500 stocks
 const STOCK_UNIVERSE = [
@@ -19,7 +20,7 @@ const getRandomTicker = () => {
 
 /**
  * Get a random historical period for the game
- * Returns dates for ~4 months total: 3 months context + 1 month game
+ * Returns dates for ~13 months total: 12 months context + 1 month game
  * Period must be at least 1 year ago to ensure data is complete
  */
 const getRandomHistoricalPeriod = () => {
@@ -37,9 +38,9 @@ const getRandomHistoricalPeriod = () => {
     const gameStartDate = new Date(gameEndDate);
     gameStartDate.setMonth(gameStartDate.getMonth() - 1);
 
-    // Context is 3 months before game starts
+    // Context is 12 months before game starts (for full year of historical data)
     const contextStartDate = new Date(gameStartDate);
-    contextStartDate.setMonth(contextStartDate.getMonth() - 3);
+    contextStartDate.setMonth(contextStartDate.getMonth() - 12);
 
     return {
         contextStartDate,
@@ -85,7 +86,7 @@ const fetchOHLCData = async (ticker, startDate, endDate) => {
 };
 
 /**
- * Split candles into context (3 months) and game (4 weeks = 20 trading days)
+ * Split candles into context (12 months) and game (4 weeks = 20 trading days)
  */
 const splitCandlesForGame = (candles) => {
     // Game is the last 20 trading days
@@ -116,11 +117,25 @@ const classifyDifficulty = (candles) => {
     return 'MEDIUM';
 };
 
+/**
+ * Get company name for a ticker
+ */
+const getCompanyName = async (ticker) => {
+    try {
+        const quote = await yahooFinance.quote(ticker);
+        return quote.shortName || quote.longName || ticker;
+    } catch (error) {
+        console.warn(`Could not fetch name for ${ticker}, using ticker`);
+        return ticker;
+    }
+};
+
 module.exports = {
     STOCK_UNIVERSE,
     getRandomTicker,
     getRandomHistoricalPeriod,
     fetchOHLCData,
     splitCandlesForGame,
-    classifyDifficulty
+    classifyDifficulty,
+    getCompanyName
 };

@@ -8,10 +8,15 @@ const openai = new OpenAI({
  * Generate news for scenario using OpenAI
  * Creates historically accurate but anonymized headlines
  */
-const generateNewsHeadlines = async (ticker, gameCandles, startDate) => {
+const generateNewsHeadlines = async (ticker, gameCandles, startDate, companyName = '') => {
     try {
         const start = new Date(startDate);
         const end = new Date(gameCandles[gameCandles.length - 1].date);
+
+        // Core name for regex (strip Inc, Corp, etc)
+        const coreName = companyName
+            .replace(/,?\s*(Inc\.?|Corp\.?|Corporation|Ltd\.?|Co\.?|PLC|S\.A\.|NV)\.?$/i, '')
+            .trim();
 
         // Format date range for context (e.g. "September 2008")
         const dateContext = `${start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} to ${end.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
@@ -36,32 +41,45 @@ const generateNewsHeadlines = async (ticker, gameCandles, startDate) => {
             }
         }
 
-        const prompt = `You are a financial news simulatior for a trading game.
-Target Date Range: ${dateContext}
-Stock Price Mvoement:
-${weeklyChanges.map(w => `Week ${w.week}: Market value has ${w.direction} by ${w.change}% (${w.volatility} volatility)`).join('\n')}
+        const prompt = `You are a financial news generator for a stock trading game.
 
-Task: Generate 8 financial news headlines (2 per week) that match the historical context of ${dateContext} and the specific price movement described.
-Rules:
-1. ANONYMIZE the specific company. Use terms like "The Company", "This Tech Giant", "The Banking Firm", or "Shares" instead of the name/ticker.
-2. References to REAL MACRO EVENTS (e.g. "Housing Crisis", "Dot-com bursting", "Covid-19", "Inflation fears") are ENCOURAGED if they happened during ${dateContext}.
-3. The headlines must explain/correlate with the price movement (e.g. if price fell 10%, headline should imply bad news).
-4. Tone: Professional financial journalism (Bloomberg/WSJ style).
+CONTEXT:
+- Company: ${companyName} (${ticker}) - a real company
+- Date Range: ${dateContext}
+- This is REAL historical data. Research what actually happened to this company during this time.
 
-Return ONLY a JSON array in this format:
+STOCK PRICE MOVEMENT (what actually happened):
+${weeklyChanges.map(w => `Week ${w.week}: Stock ${w.direction} by ${w.change}% (${w.volatility} volatility)`).join('\n')}
+
+YOUR TASK:
+Generate 8 news headlines (2 per week) that reflect REAL events that happened to ${companyName} during ${dateContext}.
+
+CRITICAL RULES:
+1. Headlines must be SPECIFIC to what actually happened to ${companyName} during this period (product launches, earnings, acquisitions, lawsuits, executive changes, etc.)
+2. Headlines must CORRELATE with the price movement (if price fell 10%, headline should explain why - bad earnings, scandal, etc.)
+3. ANONYMIZE the company name: Replace "${coreName}" and "${ticker}" with "The Company" or "This Tech Giant" or similar generic term
+4. Include real macro events if relevant (COVID, inflation, Fed rates, etc.)
+5. Professional financial journalism tone (Bloomberg/WSJ style)
+
+EXAMPLE OUTPUT:
+If Apple stock rose 15% in March 2020:
+- "The Company sees surge in demand as remote work drives device sales"
+- "Tech giant beats Q1 estimates, raises guidance for services segment"
+
+Return ONLY a valid JSON array:
 [
-  {"week": 1, "headline": "Sector hit by housing crisis fears, dragging down major lenders"},
-  {"week": 1, "headline": "The Company reports earnings miss amid broader sell-off"},
+  {"week": 1, "headline": "..."},
+  {"week": 1, "headline": "..."},
+  {"week": 2, "headline": "..."},
   ...
 ]`;
 
         const response = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
-                { role: 'system', content: 'You are a financial news generator. Return only valid JSON.' },
+                { role: 'system', content: 'You are a financial news generator. Research what actually happened to the given company during the specified time period and generate realistic headlines. Return only valid JSON.' },
                 { role: 'user', content: prompt }
             ],
-            temperature: 0.7,
             max_tokens: 1000
         });
 
@@ -81,9 +99,21 @@ Return ONLY a JSON array in this format:
             const dayOffset = ((h.week - 1) * 7) + Math.floor(Math.random() * 5);
             headlineDate.setDate(headlineDate.getDate() + dayOffset);
 
+            // Strict anonymization: Remove ticker and common variations
+            let cleanHeadline = h.headline
+                .replace(new RegExp(`\\b${ticker}\\b`, 'gi'), 'The Company')
+                .replace(new RegExp(`\\b${ticker.toLowerCase()}\\b`, 'g'), 'the company');
+
+            if (coreName && coreName.length > 2) { // Avoid replacing short common words
+                // Also handle possessive forms and variations
+                cleanHeadline = cleanHeadline
+                    .replace(new RegExp(`\\b${coreName}'s\\b`, 'gi'), "The Company's")
+                    .replace(new RegExp(`\\b${coreName}\\b`, 'gi'), 'The Company');
+            }
+
             return {
                 week: h.week,
-                headline: h.headline,
+                headline: cleanHeadline,
                 date: headlineDate,
                 source: 'Market Wire' // Generic source
             };
