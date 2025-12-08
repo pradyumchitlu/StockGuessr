@@ -32,6 +32,10 @@ const matchSchema = new mongoose.Schema(
         type: Number,
         default: 100000,
       },
+      isFinished: {
+        type: Boolean,
+        default: false,
+      },
       trades: [tradeSchema],
     },
     player2: {
@@ -47,6 +51,10 @@ const matchSchema = new mongoose.Schema(
       finalEquity: {
         type: Number,
         default: 100000,
+      },
+      isFinished: {
+        type: Boolean,
+        default: false,
       },
       trades: [tradeSchema],
     },

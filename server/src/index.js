@@ -62,9 +62,9 @@ app.get('/', (req, res) => {
 // Socket.io
 const activeMatches = new Map();
 
-const ROUND_DURATION = 12 * 1000; // 12 seconds
-const DECISION_DURATION = 9 * 1000; // 9 seconds
-const COUNTDOWN_DURATION = 5 * 1000; // 5 seconds before game starts
+const ROUND_DURATION = 24 * 1000; // 24 seconds
+const DECISION_DURATION = 18 * 1000; // 18 seconds
+const COUNTDOWN_DURATION = 10 * 1000; // 10 seconds before game starts
 
 function startGameLoop(roomName, io) {
   if (activeMatches.has(roomName)) {

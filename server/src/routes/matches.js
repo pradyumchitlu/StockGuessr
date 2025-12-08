@@ -187,28 +187,19 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
     if (player1FinalEquity !== undefined) {
       match.player1.finalEquity = player1FinalEquity;
       match.player1.finalPnL = player1FinalEquity - 100000;
+      match.player1.isFinished = true;
       if (player1Trades) match.player1.trades = player1Trades;
     }
 
     if (player2FinalEquity !== undefined && match.player2) {
       match.player2.finalEquity = player2FinalEquity;
       match.player2.finalPnL = player2FinalEquity - 100000;
+      match.player2.isFinished = true;
       if (player2Trades) match.player2.trades = player2Trades;
     }
 
-    // Check if both finished? 
-    // For now, we might receive updates partially. 
-    // But usually this is called at the end. 
-    // Let's assume this is called when a player finishes.
-
-    // If both have final equity, mark completed
-    // BUT, this endpoint seems to be designed to update everything at once?
-    // The previous code updated both. 
-    // Since we are now 1v1 distributed, each player might call this?
-    // Or we rely on socket to sync end?
-    // Let's keep it flexible. If we have both equities, we calculate winner.
-
-    if (match.player1.finalEquity !== 100000 && match.player2 && match.player2.finalEquity !== 100000) {
+    // Check if both finished using flags
+    if (match.player1.isFinished && match.player2 && match.player2.isFinished) {
       match.status = 'COMPLETED';
 
       // Determine winner

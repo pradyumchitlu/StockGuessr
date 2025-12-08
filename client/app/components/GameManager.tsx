@@ -55,8 +55,8 @@ interface Trade {
 type GamePhase = "lobby" | "waiting" | "playing" | "completed" | "error";
 type RoundPhase = "reveal" | "decision" | "waiting_for_next_round" | "countdown";
 
-const ROUND_DURATION = 12; // Total seconds per week
-const DECISION_DURATION = 7; // Seconds for decision
+const ROUND_DURATION = 24; // Total seconds per week
+const DECISION_DURATION = 18; // Seconds for decision
 
 interface GameManagerProps {
     initialJoinCode?: string;
