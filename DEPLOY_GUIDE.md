@@ -11,8 +11,8 @@
 
 ### Step 2: Configure the Backend Service
 1. Railway will auto-detect the monorepo. Click on the service that was created
-2. Go to **Settings** → **Root Directory**
-3. Set Root Directory to: `server`
+2. Go to **Settings** → **General** → **Root Directory**
+3. Set **Root Directory** to: `/server`
 4. Railway will auto-detect Node.js and use the `railway.json` config
 
 ### Step 3: Add Environment Variables
