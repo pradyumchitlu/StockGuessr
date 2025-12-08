@@ -710,10 +710,20 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
                         <div className="p-3 rounded-xl bg-white/5 border border-white/10">
                             <p className="text-xs text-gray-400 mb-1">Current Price</p>
                             <p className="text-3xl font-bold text-white">${currentCandle.close.toFixed(2)}</p>
-                            <div className={`flex items-center gap-1 mt-1 text-sm ${currentCandle.close >= currentCandle.open ? 'text-green-400' : 'text-red-400'}`}>
-                                {currentCandle.close >= currentCandle.open ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                                {((currentCandle.close - currentCandle.open) / currentCandle.open * 100).toFixed(2)}%
-                            </div>
+                            {(() => {
+                                const previousClose = currentWeek === 0
+                                    ? scenario.contextCandles[scenario.contextCandles.length - 1].close
+                                    : scenario.gameCandles[currentWeek - 1].close;
+                                const percentChange = ((currentCandle.close - previousClose) / previousClose) * 100;
+                                const isPositive = percentChange >= 0;
+
+                                return (
+                                    <div className={`flex items-center gap-1 mt-1 text-sm ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                                        {isPositive ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                                        {Math.abs(percentChange).toFixed(2)}%
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         {/* Position */}
