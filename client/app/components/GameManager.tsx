@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Play, TrendingUp, TrendingDown, Clock, DollarSign, BarChart2, Users, Copy, Swords } from "lucide-react";
+import { ArrowLeft, Play, TrendingUp, TrendingDown, Clock, DollarSign, BarChart2, Users, Copy, Swords, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
@@ -625,9 +625,15 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
                             <div className="flex items-center gap-3 border-r border-white/10 pr-6">
                                 <div className="text-right">
                                     <p className="text-xs text-gray-500 uppercase tracking-wider">Opponent</p>
-                                    <p className="text-lg font-mono font-bold text-gray-400">
-                                        ${opponent.equity?.toLocaleString() || '100,000'}
-                                    </p>
+                                    <div className="flex items-center justify-end gap-2">
+                                        <span className={`text-sm font-bold ${((opponent.equity - 100000) / 100000 * 100) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {((opponent.equity - 100000) / 100000 * 100) >= 0 ? '+' : ''}
+                                            {((opponent.equity - 100000) / 100000 * 100).toFixed(2)}%
+                                        </span>
+                                        <p className="text-lg font-mono font-bold text-gray-400">
+                                            ${opponent.equity?.toLocaleString() || '100,000'}
+                                        </p>
+                                    </div>
                                 </div>
                                 <Swords className="w-5 h-5 text-gray-600" />
                             </div>
@@ -813,59 +819,59 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
                     </div>
 
                     <div className="grid grid-cols-2 divide-x divide-white/10">
-                        <div className="p-8 flex flex-col justify-center items-center">
-                            <p className="text-gray-400 mb-2">Final Portfolio Value</p>
-                            <p className="text-5xl font-bold text-white mb-4">${availableCash.toLocaleString()}</p>
-                            <div className={`px - 4 py - 2 rounded - full text - lg font - bold ${totalReturn >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'} `}>
+                        {/* Player Stats */}
+                        <div className="p-8 flex flex-col justify-center items-center relative">
+                            {availableCash > (opponent?.equity || 0) && (
+                                <div className="absolute top-4 right-4 text-yellow-400 animate-pulse">
+                                    <Trophy className="w-8 h-8" />
+                                </div>
+                            )}
+                            <p className="text-gray-400 mb-2 uppercase tracking-widest text-xs">You</p>
+                            <div className="text-5xl font-bold text-white mb-4">${availableCash.toLocaleString()}</div>
+                            <div className={`px-4 py-2 rounded-full text-lg font-bold ${totalReturn >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                                 {totalReturn >= 0 ? '+' : ''}{totalReturn.toFixed(2)}% Return
                             </div>
+                            {availableCash > (opponent?.equity || 0) && (
+                                <div className="mt-4 text-green-400 font-bold text-xl">VICTORY</div>
+                            )}
                         </div>
 
-                        {/* Opponent Result Placeholder */}
-                        {/* Ideally we fetch match results here to compare */}
-                        <div className="p-8">
-                            <h3 className="text-lg font-bold mb-4 text-gray-300">Performance Summary</h3>
-                            <div className="space-y-4">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-500">Total Trades</span>
-                                    <span>{trades.length}</span>
+                        {/* Opponent Stats */}
+                        <div className="p-8 flex flex-col justify-center items-center relative">
+                            {(opponent?.equity || 0) > availableCash && (
+                                <div className="absolute top-4 left-4 text-yellow-400 animate-pulse">
+                                    <Trophy className="w-8 h-8" />
                                 </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-500">Best Trade</span>
-                                    <span className={(() => {
-                                        const pnlTrades = trades.filter(t => t.pnl !== undefined && t.pnl !== 0);
-                                        if (pnlTrades.length === 0) {
-                                            // Check if there's any non-zero pnl
-                                            const anyPnl = trades.find(t => t.pnl !== undefined && t.pnl !== 0);
-                                            if (!anyPnl) return 'text-gray-400';
-                                        }
-                                        const allPnls = trades.filter(t => t.pnl !== undefined).map(t => t.pnl!);
-                                        if (allPnls.length === 0) return 'text-gray-400';
-                                        const best = Math.max(...allPnls);
-                                        return best > 0 ? 'text-green-400' : best < 0 ? 'text-red-400' : 'text-gray-400';
-                                    })()}>
-                                        {(() => {
-                                            const pnlTrades = trades.filter(t => t.pnl !== undefined);
-                                            if (pnlTrades.length === 0) return 'N/A';
-                                            const allPnls = pnlTrades.map(t => t.pnl!);
-                                            const best = Math.max(...allPnls);
-                                            if (best === 0) return '$0';
-                                            return (best >= 0 ? '+' : '') + '$' + best.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-                                        })()}
-                                    </span>
-                                </div>
-                                <div className="mt-4 pt-4 border-t border-white/10">
-                                    <span className="text-gray-500 text-sm">AI Analysis</span>
-                                    {isLoadingAnalysis ? (
-                                        <p className="text-gray-400 text-sm mt-2 italic">Analyzing your trades...</p>
-                                    ) : aiAnalysis ? (
-                                        <p className="text-gray-200 text-sm mt-2 leading-relaxed">{aiAnalysis}</p>
-                                    ) : (
-                                        <p className="text-gray-400 text-sm mt-2 italic">Analysis unavailable</p>
+                            )}
+                            <p className="text-gray-400 mb-2 uppercase tracking-widest text-xs">Opponent</p>
+                            {opponent ? (
+                                <>
+                                    <div className="text-5xl font-bold text-gray-300 mb-4">${opponent.equity.toLocaleString()}</div>
+                                    <div className={`px-4 py-2 rounded-full text-lg font-bold ${((opponent.equity - 100000) / 100000 * 100) >= 0 ? 'bg-green-500/10 text-green-500/70' : 'bg-red-500/10 text-red-500/70'}`}>
+                                        {((opponent.equity - 100000) / 100000 * 100) >= 0 ? '+' : ''}
+                                        {((opponent.equity - 100000) / 100000 * 100).toFixed(2)}% Return
+                                    </div>
+                                    {(opponent.equity > availableCash) && (
+                                        <div className="mt-4 text-red-400 font-bold text-xl">WINNER</div>
                                     )}
-                                </div>
-                            </div>
+                                </>
+                            ) : (
+                                <div className="text-gray-500 italic">Waiting for opponent results...</div>
+                            )}
                         </div>
+                    </div>
+
+                    <div className="border-t border-white/10 p-8">
+                        <h3 className="text-lg font-bold mb-4 text-gray-300 text-center">AI Performance Analysis</h3>
+                        {isLoadingAnalysis ? (
+                            <p className="text-gray-400 text-sm mt-2 italic text-center">Analyzing your trading strategy...</p>
+                        ) : aiAnalysis ? (
+                            <div className="text-gray-200 text-sm mt-2 leading-relaxed max-w-2xl mx-auto bg-white/5 p-6 rounded-xl border border-white/5">
+                                {aiAnalysis}
+                            </div>
+                        ) : (
+                            <p className="text-gray-400 text-sm mt-2 italic text-center">Analysis unavailable</p>
+                        )}
                     </div>
 
                     <div className="p-8 bg-white/5 border-t border-white/10 flex justify-center gap-4">
