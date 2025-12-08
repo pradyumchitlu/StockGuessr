@@ -252,19 +252,43 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
         };
 
         let newCash = availableCash;
-        let newPosition = position ? { ...position } : null;
+        // Fallback to current leverage if stored is missing (legacy positions)
+        let newPosition: { shares: number; entryPrice: number; entryWeek: number; leverage: number } | null = position ? { ...position, leverage: (position as any).leverage || leverage } : null;
         let pnl = 0;
+
+        // ...
+
+        // Check for Game Over locally if it's the last week
+        if (currentWeek >= 3) {
+            const lastPrice = scenario.gameCandles[3].close;
+            let finalEquity = newCash;
+            if (newPosition) {
+                // Close position at market - return margin + final PnL
+                // Use STORED leverage
+                const usedLeverage = newPosition.leverage || leverage; // Fallback again just in case
+                const marginInPosition = (Math.abs(newPosition.shares) * newPosition.entryPrice) / usedLeverage;
+                const finalPnL = newPosition.shares > 0
+                    ? (lastPrice - newPosition.entryPrice) * newPosition.shares
+                    : (newPosition.entryPrice - lastPrice) * Math.abs(newPosition.shares);
+
+                console.log(`[EndGame] Shares: ${newPosition.shares}, Entry: ${newPosition.entryPrice}, Last: ${lastPrice}, Lev: ${usedLeverage}`);
+                console.log(`[EndGame] Margin: ${marginInPosition}, PnL: ${finalPnL}, Cash: ${newCash}`);
+
+                finalEquity = newCash + marginInPosition + finalPnL;
+            }
+            endGame(finalEquity, newPosition);
+        }
 
         if (action === "BUY") {
             if (selectedShares > 0) {
                 const positionValue = selectedShares * price;
-                const marginRequired = positionValue / leverage;
 
                 if (!newPosition) {
                     // Opening new LONG position
+                    const marginRequired = positionValue / leverage; // Use current slider for NEW position
                     if (newCash >= marginRequired) {
                         newCash -= marginRequired;
-                        newPosition = { shares: selectedShares, entryPrice: price, entryWeek: currentWeek };
+                        newPosition = { shares: selectedShares, entryPrice: price, entryWeek: currentWeek, leverage: leverage };
                         newTrade.shares = selectedShares;
                     } else {
                         alert("Not enough cash for margin!");
@@ -281,7 +305,8 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
                     newTrade.shares = selectedShares;
 
                     // Return margin from closed short + PnL
-                    const marginReturned = (sharesToCover * newPosition.entryPrice) / leverage;
+                    // Use STORED leverage
+                    const marginReturned = (sharesToCover * newPosition.entryPrice) / newPosition.leverage;
                     newCash += marginReturned + pnl;
 
                     const totalShares = newPosition.shares + sharesToCover;
@@ -294,15 +319,17 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
 
                     // If buying more than covering, open new long
                     if (remainingBuyShares > 0 && newPosition === null) {
-                        const newMargin = (remainingBuyShares * price) / leverage;
+                        const newMargin = (remainingBuyShares * price) / leverage; // Use CURRENT slider for NEW position
                         if (newCash >= newMargin) {
                             newCash -= newMargin;
-                            newPosition = { shares: remainingBuyShares, entryPrice: price, entryWeek: currentWeek };
+                            newPosition = { shares: remainingBuyShares, entryPrice: price, entryWeek: currentWeek, leverage: leverage };
                         }
                     }
                 } else {
                     // Adding to LONG position
-                    const additionalMargin = positionValue / leverage;
+                    // Use STORED leverage for consistency, or block? 
+                    // Let's use STORED leverage to prevent "averaging down" leverage exploits.
+                    const additionalMargin = positionValue / newPosition.leverage;
                     if (newCash >= additionalMargin) {
                         newCash -= additionalMargin;
                         const totalShares = newPosition.shares + selectedShares;
@@ -310,7 +337,8 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
                         newPosition = {
                             shares: totalShares,
                             entryPrice: totalCost / totalShares,
-                            entryWeek: newPosition.entryWeek
+                            entryWeek: newPosition.entryWeek,
+                            leverage: newPosition.leverage // Keep original leverage
                         };
                         newTrade.shares = selectedShares;
                     } else {
@@ -329,13 +357,13 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
 
             if (sharesToUse > 0) {
                 const positionValue = sharesToUse * price;
-                const marginRequired = positionValue / leverage;
 
                 if (!newPosition) {
                     // Opening new SHORT position
+                    const marginRequired = positionValue / leverage; // Use CURRENT slider
                     if (newCash >= marginRequired) {
                         newCash -= marginRequired;
-                        newPosition = { shares: -sharesToUse, entryPrice: price, entryWeek: currentWeek };
+                        newPosition = { shares: -sharesToUse, entryPrice: price, entryWeek: currentWeek, leverage: leverage };
                         newTrade.shares = sharesToUse;
                     } else {
                         alert("Not enough cash for margin!");
@@ -352,7 +380,8 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
                     newTrade.shares = sharesToUse;
 
                     // Return margin from closed long + PnL
-                    const marginReturned = (sharesToSell * newPosition.entryPrice) / leverage;
+                    // Use STORED leverage
+                    const marginReturned = (sharesToSell * newPosition.entryPrice) / newPosition.leverage;
                     newCash += marginReturned + pnl;
 
                     const totalShares = newPosition.shares - sharesToSell;
@@ -365,23 +394,25 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
 
                     // If selling more than position, open new short
                     if (remainingSellShares > 0 && newPosition === null) {
-                        const newMargin = (remainingSellShares * price) / leverage;
+                        const newMargin = (remainingSellShares * price) / leverage; // Use CURRENT slider
                         if (newCash >= newMargin) {
                             newCash -= newMargin;
-                            newPosition = { shares: -remainingSellShares, entryPrice: price, entryWeek: currentWeek };
+                            newPosition = { shares: -remainingSellShares, entryPrice: price, entryWeek: currentWeek, leverage: leverage };
                         }
                     }
                 } else {
                     // Adding to SHORT position
-                    const additionalMargin = positionValue / leverage;
+                    // Use STORED leverage
+                    const additionalMargin = positionValue / newPosition.leverage;
                     if (newCash >= additionalMargin) {
                         newCash -= additionalMargin;
-                        const totalShares = newPosition.shares - sharesToUse;
+                        const totalShares = newPosition.shares - sharesToUse; // Short shares are negative
                         const totalValue = (Math.abs(newPosition.shares) * newPosition.entryPrice) + positionValue;
                         newPosition = {
                             shares: totalShares,
                             entryPrice: totalValue / Math.abs(totalShares),
-                            entryWeek: newPosition.entryWeek
+                            entryWeek: newPosition.entryWeek,
+                            leverage: newPosition.leverage
                         };
                         newTrade.shares = sharesToUse;
                     } else {
@@ -403,7 +434,8 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
         // Equity = Cash + Margin held in position + Unrealized PnL
         let currentEquity = newCash;
         if (newPosition) {
-            const marginInPosition = (Math.abs(newPosition.shares) * newPosition.entryPrice) / leverage;
+            // Use STORED leverage
+            const marginInPosition = (Math.abs(newPosition.shares) * newPosition.entryPrice) / newPosition.leverage;
             const unrealizedPnL = newPosition.shares > 0
                 ? (price - newPosition.entryPrice) * newPosition.shares  // Long PnL
                 : (newPosition.entryPrice - price) * Math.abs(newPosition.shares); // Short PnL
@@ -430,10 +462,16 @@ export default function GameManager({ initialJoinCode }: GameManagerProps) {
             let finalEquity = newCash;
             if (newPosition) {
                 // Close position at market - return margin + final PnL
-                const marginInPosition = (Math.abs(newPosition.shares) * newPosition.entryPrice) / leverage;
+                // Use STORED leverage
+                const usedLeverage = newPosition.leverage || leverage; // Fallback again
+                const marginInPosition = (Math.abs(newPosition.shares) * newPosition.entryPrice) / usedLeverage;
                 const finalPnL = newPosition.shares > 0
                     ? (lastPrice - newPosition.entryPrice) * newPosition.shares
                     : (newPosition.entryPrice - lastPrice) * Math.abs(newPosition.shares);
+
+                console.log(`[EndGame] Shares: ${newPosition.shares}, Entry: ${newPosition.entryPrice}, Last: ${lastPrice}, Lev: ${usedLeverage}`);
+                console.log(`[EndGame] Margin: ${marginInPosition}, PnL: ${finalPnL}, Cash: ${newCash}`);
+
                 finalEquity = newCash + marginInPosition + finalPnL;
             }
             endGame(finalEquity, newPosition);
