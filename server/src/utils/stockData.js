@@ -4,10 +4,10 @@ const yahooFinance = new YahooFinance();
 // Curated list of liquid, well-known S&P 500 stocks
 const STOCK_UNIVERSE = [
     'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'JPM', 'V', 'JNJ',
-    'WMT', 'PG', 'UNH', 'HD', 'MA', 'BAC', 'XOM', 'PFE', 'KO', 'PEP',
-    'COST', 'DIS', 'CSCO', 'VZ', 'ADBE', 'NFLX', 'INTC', 'AMD', 'CRM', 'NKE',
-    'MCD', 'T', 'ORCL', 'IBM', 'GS', 'MS', 'TXN', 'QCOM', 'UPS', 'CAT',
-    'BA', 'GE', 'MMM', 'CVX', 'LMT', 'RTX', 'SBUX', 'BKNG', 'PYPL', 'SQ'
+    'LLY', 'NKE', 'UNH', 'HD', 'MA', 'BAC', 'XOM', 'PFE', 'KO', 'PEP',
+    'COST', 'DIS', 'CSCO', 'VZ', 'ADBE', 'NFLX', 'ORCL', 'AMD', 'CRM', 'DE',
+    'MCD', 'T', 'ORCL', 'IBM', 'GS', 'TSLA', 'TXN', 'QCOM', 'INTC', 'CAT',
+    'BA', 'GEV', 'GE', 'CRWV', 'LMT', 'RTX', 'SBUX', 'COF', 'NTNX', 'ALAB'
 ];
 
 /**
