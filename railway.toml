@@ -1,8 +1,5 @@
 [build]
 builder = "nixpacks"
 
-[build.nixpacks]
-root = "server"
-
 [deploy]
-startCommand = "npm start"
+startCommand = "cd server && npm start"
